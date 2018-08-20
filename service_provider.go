@@ -275,6 +275,9 @@ func (sp *ServiceProvider) MakeAuthenticationRequest(idpURL string) (*AuthnReque
 			Value:  sp.MetadataURL.String(),
 		},
 		NameIDPolicy: &NameIDPolicy{
+			XMLName: xml.Name{
+				Local: "NameIDPolicy",
+			},
 			AllowCreate: &allowCreate,
 			// TODO(ross): figure out exactly policy we need
 			// urn:mace:shibboleth:1.0:nameIdentifier
@@ -463,8 +466,18 @@ func (sp *ServiceProvider) ParseResponse(req *http.Request, possibleRequestIDs [
 			retErr.PrivateErr = err
 			return nil, retErr
 		}
+		var key interface{} = sp.Key
+		keyEl := doc.FindElement("//EncryptedAssertion/EncryptedKey")
+		if keyEl != nil {
+			key, err = xmlenc.Decrypt(sp.Key, keyEl)
+			if err != nil {
+				retErr.PrivateErr = fmt.Errorf("failed to decrypt key from response: %s", err)
+				return nil, retErr
+			}
+		}
+
 		el := doc.FindElement("//EncryptedAssertion/EncryptedData")
-		plaintextAssertion, err := xmlenc.Decrypt(sp.Key, el)
+		plaintextAssertion, err := xmlenc.Decrypt(key, el)
 		if err != nil {
 			retErr.PrivateErr = fmt.Errorf("failed to decrypt response: %s", err)
 			return nil, retErr
